@@ -16,7 +16,7 @@ HEADERS = {
     "X-RapidAPI-Host": RAPIDAPI_HOST
 }
 
-# ✅ Verified working IDs
+# Verified IDs
 KNOWN_PLAYERS = {
     "Virat Kohli": 1413,
     "Rohit Sharma": 576,
@@ -25,8 +25,8 @@ KNOWN_PLAYERS = {
     "Joe Root": 8019,
     "David Warner": 1739,
     "MS Dhoni": 265,
-    "Jasprit Bumrah": 9311,   # candidate from profile link
-    "Hardik Pandya": 9647     # candidate from profile link
+    "Jasprit Bumrah": 9311,
+    "Hardik Pandya": 9647
 }
 
 @st.cache_data(ttl=21600)
@@ -46,17 +46,30 @@ def parse_recent(data, key):
     records = []
     section = data.get(key, {})
     if "rows" in section:
+        headers = section.get("headers", [])
         for row in section["rows"]:
             vals = row.get("values", [])
-            if len(vals) >= 5:
-                records.append({
-                    "Match ID": vals[0],
-                    "Opposition": vals[1],
-                    "Stat": vals[2],
-                    "Format": vals[3],
-                    "Date": vals[4]
-                })
+            row_dict = {}
+            for i, h in enumerate(headers):
+                if i < len(vals):
+                    row_dict[h] = vals[i]
+            if row_dict:
+                records.append(row_dict)
     return pd.DataFrame(records)
+
+def parse_rankings(rankings):
+    """Convert rankings dict into a clean DataFrame."""
+    if not rankings:
+        return pd.DataFrame()
+    rows = []
+    for category, stats in rankings.items():
+        for k, v in stats.items():
+            rows.append({
+                "Category": category.upper(),
+                "Metric": k,
+                "Value": v
+            })
+    return pd.DataFrame(rows)
 
 def show():
     st.title("📊 Player Stats (Predefined Players)")
@@ -72,8 +85,8 @@ def show():
         st.error("❌ Unable to fetch profile data.")
         return
 
-    # Display basic profile
-    if "image" in profile and profile["image"]:
+    # Basic profile
+    if profile.get("image"):
         st.image(profile["image"], width=120)
     st.subheader(profile.get("name", "Unknown"))
     st.markdown(
@@ -81,10 +94,14 @@ def show():
     )
     st.markdown(f"**Teams:** {profile.get('teams','')}")
 
-    # Rankings (if available)
+    # Rankings
     if "rankings" in profile:
         st.subheader("🌍 Rankings")
-        st.json(profile["rankings"])
+        rank_df = parse_rankings(profile["rankings"])
+        if not rank_df.empty:
+            st.dataframe(rank_df, use_container_width=True)
+        else:
+            st.info("No rankings available.")
 
     # Recent performance
     col1, col2 = st.columns(2)
